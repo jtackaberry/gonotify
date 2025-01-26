@@ -300,31 +300,32 @@ func NewInotify(ctx context.Context) (*Inotify, error) {
 				case <-ctx.Done():
 				}
 			case req := <-inotify.rmByWdIn:
-				pathName, ok := paths[req.wd]
-				if !ok {
-					continue
-				}
+				var err error
+				if pathName, ok := paths[req.wd]; !ok {
+					err = errors.New("watch descriptor not found")
+				} else {
+					if !req.ignored {
+						_, err = syscallf.InotifyRmWatch(fd, req.wd)
+					}
 
-				if !req.ignored {
-					_, err = syscallf.InotifyRmWatch(fd, req.wd)
+					delete(watches, pathName)
+					delete(paths, req.wd)
 				}
-
-				delete(watches, pathName)
-				delete(paths, req.wd)
 
 				select {
 				case req.result <- err:
 				case <-ctx.Done():
 				}
 			case req := <-inotify.rmByPathIn:
-				wd, ok := watches[req.pathName]
-				if !ok {
-					continue
-				}
-				_, err := syscallf.InotifyRmWatch(fd, wd)
+				var err error
+				if wd, ok := watches[req.pathName]; !ok {
+					err = errors.New("watch path not found")
+				} else {
+					_, err = syscallf.InotifyRmWatch(fd, wd)
 
-				delete(watches, req.pathName)
-				delete(paths, wd)
+					delete(watches, req.pathName)
+					delete(paths, wd)
+				}
 
 				select {
 				case req.result <- err:
